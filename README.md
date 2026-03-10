@@ -1,5 +1,5 @@
 # Direct Mail
-Forked from https://github.com/Patta/direct_mail/tree/v13
+Forked from https://github.com/Patta/direct_mail/tree/v13 Thanks Patta!
 
 
 The »Direct Mail« extension implements an advanced newsletter mailer system for the [TYPO3 CMS](https://typo3.org). This extension provides not only a system for sending a newsletter from TYPO3 CMS, but also personalizing it and collect some statistics.
