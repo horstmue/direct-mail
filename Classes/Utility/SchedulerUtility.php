@@ -12,6 +12,8 @@ namespace DirectMailTeam\DirectMail\Utility;
 
 use DirectMailTeam\DirectMail\Repository\TempRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Scheduler\Exception\InvalidTaskException;
+use TYPO3\CMS\Scheduler\ProgressProviderInterface;
 use TYPO3\CMS\Scheduler\Service\TaskService;
 use TYPO3\CMS\Scheduler\Task\AbstractTask;
 use TYPO3\CMS\Scheduler\Task\TaskSerializer;
@@ -19,6 +21,12 @@ use TYPO3\CMS\Scheduler\Validation\Validator\TaskValidator;
 
 class SchedulerUtility
 {
+    public function __construct(
+        private readonly TaskSerializer $taskSerializer,
+        private readonly TaskService $taskService,
+        private readonly TempRepository $tempRepository,
+    ) {}
+
     protected static function isValidTaskObject($task): bool
     {
         return (new TaskValidator())->isValid($task);
@@ -26,10 +34,14 @@ class SchedulerUtility
 
     public static function getDMTable(): array
     {
-        $taskSerializer = GeneralUtility::makeInstance(TaskSerializer::class);
-        $registeredClasses = GeneralUtility::makeInstance(TaskService::class)->getAvailableTaskTypes();
+        return GeneralUtility::makeInstance(self::class)->buildDMTable();
+    }
 
-        $tasks = GeneralUtility::makeInstance(TempRepository::class)->getDMTasks();
+    private function buildDMTable(): array
+    {
+        $registeredClasses = $this->taskService->getAvailableTaskTypes();
+
+        $tasks = $this->tempRepository->getDMTasks();
 
         $taskGroupsWithTasks = [];
         $errorClasses = [];
@@ -45,31 +57,21 @@ class SchedulerUtility
                 ];
 
                 try {
-                    $taskObject = $taskSerializer->deserialize($task['serialized_task_object']);
+                    $taskObject = $this->taskSerializer->deserialize($task['serialized_task_object']);
                 } catch (InvalidTaskException $e) {
                     $taskData['errorMessage'] = $e->getMessage();
-                    $taskData['class'] = $taskSerializer->extractClassName($task['serialized_task_object']);
+                    $taskData['class'] = $this->taskSerializer->extractClassName($task['serialized_task_object']);
                     $errorClasses[] = $taskData;
                     continue;
                 }
 
-                $taskClass = $taskSerializer->resolveClassName($taskObject);
+                $taskClass = $this->taskSerializer->resolveClassName($taskObject);
                 $taskData['class'] = $taskClass;
 
                 if (!self::isValidTaskObject($taskObject)) {
                     $taskData['errorMessage'] = 'The class ' . $taskClass . ' is not a valid task';
                     $errorClasses[] = $taskData;
                     continue;
-                }
-
-                if (!isset($registeredClasses[$taskClass])) {
-                    $taskData['errorMessage'] = 'The class ' . $taskClass . ' is not a registered task';
-                    $errorClasses[] = $taskData;
-                    continue;
-                }
-
-                if ($taskObject instanceof ProgressProviderInterface) {
-                    $taskData['progress'] = round((float)$taskObject->getProgress(), 2);
                 }
 
                 if (!isset($registeredClasses[$taskClass])) {
@@ -97,7 +99,7 @@ class SchedulerUtility
                 $taskData['lastExecutionFailure'] = false;
                 if (!empty($task['lastexecution_failure'])) {
                     $taskData['lastExecutionFailure'] = true;
-                    $exceptionArray = @unserialize($task['lastexecution_failure']);
+                    $exceptionArray = @unserialize($task['lastexecution_failure'], ['allowed_classes' => false]);
                     $taskData['lastExecutionFailureCode'] = '';
                     $taskData['lastExecutionFailureMessage'] = '';
                     if (is_array($exceptionArray)) {
