@@ -11,6 +11,7 @@ namespace DirectMailTeam\DirectMail\Utility;
  */
 
 use DirectMailTeam\DirectMail\Repository\TempRepository;
+use TYPO3\CMS\Core\Serializer\DenyListDeserializer;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Scheduler\Exception\InvalidTaskException;
 use TYPO3\CMS\Scheduler\ProgressProviderInterface;
@@ -34,7 +35,14 @@ class SchedulerUtility
 
     public static function getDMTable(): array
     {
-        return GeneralUtility::makeInstance(self::class)->buildDMTable();
+        return (new self(
+            GeneralUtility::makeInstance(
+                TaskSerializer::class,
+                GeneralUtility::makeInstance(DenyListDeserializer::class)
+            ),
+            GeneralUtility::makeInstance(TaskService::class),
+            GeneralUtility::makeInstance(TempRepository::class),
+        ))->buildDMTable();
     }
 
     private function buildDMTable(): array
